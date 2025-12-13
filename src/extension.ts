@@ -1,6 +1,52 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
+import * as fs from 'fs';
+import * as path from 'path';
 import * as vscode from 'vscode';
+
+function discoverCodeceptionTests(
+	controller: vscode.TestController,
+	workspaceRoot: string
+) {
+	const testsRoot = path.join(workspaceRoot, 'tests');
+
+	if (!fs.existsSync(testsRoot)) {
+		return;
+	}
+
+	const suiteFiles = fs.readdirSync(testsRoot)
+		.filter(f => f.endsWith('.suite.yml'));
+
+	for (const suiteFile of suiteFiles) {
+		const suiteName = suiteFile.replace('.suite.yml', '');
+		const suiteDir = path.join(testsRoot, suiteName);
+
+		const suiteItem = controller.createTestItem(
+			`suite-${suiteName}`,
+			suiteName,
+			vscode.Uri.file(suiteDir)
+		);
+
+		controller.items.add(suiteItem);
+
+		if (!fs.existsSync(suiteDir)) {
+			continue;
+		}
+
+		const testFiles = fs.readdirSync(suiteDir)
+			.filter(f => f.endsWith('Test.php') || f.endsWith('Cest.php'));
+
+		for (const file of testFiles) {
+			const filePath = path.join(suiteDir, file);
+
+			const testItem = controller.createTestItem(
+				`test-${suiteName}-${file}`,
+				file,
+				vscode.Uri.file(filePath)
+			);
+
+			suiteItem.children.add(testItem);
+		}
+	}
+}
 
 export function activate(context: vscode.ExtensionContext) {
 	const controller = vscode.tests.createTestController(
@@ -10,21 +56,10 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(controller);
 
-	// Dummy suite
-	const suite = controller.createTestItem(
-		'dummy-suite',
-		'Dummy suite',
-		vscode.Uri.parse('file:///dummy')
-	);
-	controller.items.add(suite);
-
-	// Dummy test
-	const test = controller.createTestItem(
-		'dummy-test',
-		'it works',
-		vscode.Uri.parse('file:///dummy')
-	);
-	suite.children.add(test);
+	const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+	if (workspaceFolder) {
+		discoverCodeceptionTests(controller, workspaceFolder.uri.fsPath);
+	}
 
 	// Run handler
 	controller.createRunProfile(
