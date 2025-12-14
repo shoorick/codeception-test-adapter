@@ -4,6 +4,50 @@ import * as vscode from 'vscode';
 import { spawn } from 'child_process';
 import { XMLParser } from 'fast-xml-parser';
 
+function populateTestsFromFile(
+	controller: vscode.TestController,
+	parent: vscode.TestItem,
+	filePath: string
+) {
+	const content = fs.readFileSync(filePath, 'utf8');
+	const lines = content.split(/\r?\n/);
+
+	const isCest = filePath.endsWith('Cest.php');
+
+	const testRegex = /function\s+(test\w+)\s*\(/;
+	const cestRegex = /public\s+function\s+([A-Za-z_]\w*)\s*\(/;
+
+	for (let line = 0; line < lines.length; line++) {
+		const text = lines[line];
+
+		const match = isCest ? cestRegex.exec(text) : testRegex.exec(text);
+		if (!match) {
+			continue;
+		}
+
+		const methodName = match[1];
+
+		if (isCest && methodName.startsWith('__')) {
+			continue;
+		}
+
+		const id = `${parent.id}::${methodName}`;
+		const range = new vscode.Range(
+			new vscode.Position(line, 0),
+			new vscode.Position(line, text.length)
+		);
+
+		const child = controller.createTestItem(
+			id,
+			methodName,
+			vscode.Uri.file(filePath)
+		);
+		child.range = range;
+
+		parent.children.add(child);
+	}
+}
+
 
 function discoverCodeceptionTests(
 	controller: vscode.TestController,
@@ -47,6 +91,8 @@ function discoverCodeceptionTests(
 			);
 
 			suiteItem.children.add(testItem);
+
+			populateTestsFromFile(controller, testItem, filePath);
 		}
 	}
 }
@@ -118,14 +164,23 @@ export async function runCodeceptionTest(
 	let args: string[];
 
 	if (filePath.endsWith('.php')) {
-		// Run a single test file
 		const relative = path.relative(testsRoot, filePath);
 		const parts = relative.split(path.sep);
 		const suite = parts[0];
-		const file = parts.slice(1).join(path.sep);
+		let file = parts.slice(1).join(path.sep);
+
+		// if a specific method was selected, narrow run to that method only
+		// using Codeception syntax: path/to/file.php:methodName
+		if (item.parent && item.parent.uri?.fsPath === filePath) {
+			const methodName = item.label;
+			if (methodName) {
+				file = `${file}:${methodName}`;
+			}
+		}
+
 		args = ['run', suite, file, '--no-interaction', '--xml'];
 	} else {
-		// Run an entire suite
+		// Run an entire suite directory
 		const suite = path.basename(filePath);
 		args = ['run', suite, '--no-interaction', '--xml'];
 	}
@@ -173,14 +228,44 @@ export async function runCodeceptionTest(
 		const testName = tc['@_name'] || 'unknown';
 		const fileAttr = tc['@_file'] || '';
 
-		// find TestItem by uri
 		let testItem: vscode.TestItem | undefined;
-		for (const [, test] of controller.items) {
-			if (test.uri?.fsPath === fileAttr) {
-				testItem = test;
+
+		// try to map to suite -> file -> method
+		for (const [, suiteItem] of controller.items) {
+			for (const [, fileItem] of suiteItem.children) {
+				if (!fileItem.uri) {
+					continue;
+				}
+
+				// prefer exact path match when possible
+				const samePath = fileAttr && fileItem.uri.fsPath === fileAttr;
+				// fall back to basename match if report points to different checkout path
+				const sameName =
+					!samePath && fileAttr &&
+					path.basename(fileItem.uri.fsPath) === path.basename(fileAttr);
+
+				if (!samePath && !sameName) {
+					continue;
+				}
+
+				// if we ran a specific method, try to find it by name
+				for (const [, methodItem] of fileItem.children) {
+					if (methodItem.label === testName) {
+						testItem = methodItem;
+						break;
+					}
+				}
+
+				if (!testItem) {
+					// fall back to file-level item
+					testItem = fileItem;
+				}
+
 				break;
 			}
+			if (testItem) { break; }
 		}
+
 		if (!testItem) { testItem = item; }
 
 		run.started(testItem);
