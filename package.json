@@ -1,10 +1,18 @@
 {
   "name": "codeception-test-adapter",
-  "displayName": "codeception-test-adapter",
-  "description": "Test adapter for Codeception",
+  "displayName": "Codeception Test Adapter",
+  "description": "VSCode compatible test adapter for Codeception",
   "version": "0.0.1",
   "publisher": "shoorick",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shoorick/codeception-test-adapter.git"
+  },
+  "homepage": "https://github.com/shoorick/codeception-test-adapter",
+  "bugs": {
+    "url": "https://github.com/shoorick/codeception-test-adapter/issues"
+  },
   "engines": {
     "vscode": "^1.105.0"
   },
@@ -22,6 +30,7 @@
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "vsix": "npx vsce package",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
@@ -32,9 +41,10 @@
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
-    "@types/vscode": "^1.107.0",
+    "@types/vscode": "^1.105.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.7.1",
     "esbuild": "^0.27.1",
     "eslint": "^9.39.1",
     "npm-run-all": "^4.1.5",
