@@ -3,6 +3,8 @@
   "displayName": "codeception-test-adapter",
   "description": "Test adapter for Codeception",
   "version": "0.0.1",
+  "publisher": "shoorick",
+  "license": "MIT",
   "engines": {
     "vscode": "^1.105.0"
   },
