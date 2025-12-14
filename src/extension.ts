@@ -185,12 +185,9 @@ export async function runCodeceptionTest(
 		args = ['run', suite, '--no-interaction', '--xml'];
 	}
 
-	try {
-		await execProcess(command, args, workspaceRoot, run);
-	} catch (err: any) {
-		run.appendOutput(err.message + '\n');
-		run.end();
-		return;
+	const exitCode = await execProcess(command, args, workspaceRoot, run);
+	if (exitCode !== 0) {
+		run.appendOutput(`Codeception exited with code ${exitCode}\n`);
 	}
 
 	// XML report path (default)
@@ -249,8 +246,14 @@ export async function runCodeceptionTest(
 				}
 
 				// if we ran a specific method, try to find it by name
+				// handle parameterized tests like "testX with data set #0" by
+				// matching both full name and base method name before the suffix
+				const baseNameIndex = testName.indexOf(' with data set');
+				const baseName = baseNameIndex >= 0
+					? testName.substring(0, baseNameIndex)
+					: testName;
 				for (const [, methodItem] of fileItem.children) {
-					if (methodItem.label === testName) {
+					if (methodItem.label === testName || methodItem.label === baseName) {
 						testItem = methodItem;
 						break;
 					}
@@ -293,16 +296,15 @@ function execProcess(
 	args: string[],
 	cwd: string,
 	run: vscode.TestRun
-): Promise<void> {
-	return new Promise((resolve, reject) => {
+): Promise<number> {
+	return new Promise(resolve => {
 		const proc = spawn(command, args, { cwd, shell: true, env: process.env });
 
 		proc.stdout.on('data', data => run.appendOutput(data.toString()));
 		proc.stderr.on('data', data => run.appendOutput(data.toString()));
 
 		proc.on('exit', code => {
-			if (code === 0) { resolve(); }
-			else { reject(new Error(`Process exited with code ${code}`)); }
+			resolve(typeof code === 'number' ? code : 0);
 		});
 	});
 }
