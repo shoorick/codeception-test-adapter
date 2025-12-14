@@ -1,71 +1,126 @@
-# codeception-test-adapter README
+# Codeception Test Adapter
 
-This is the README for your extension "codeception-test-adapter". After writing up a brief description, we recommend including the following sections.
+VSCode compatible test adapter for [Codeception](https://codeception.com/)
+(PHP testing framework).
+
+The extension discovers Codeception tests in your workspace and integrates them with the built‑in **Testing** view, so you can:
+
+- run individual test methods, whole test files, or entire suites;
+- see green/red status and failure messages directly in VS Code;
+- re‑run tests from the Testing panel or from the editor gutter.
+
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+- **Automatic test discovery**
+  - Looks for Codeception suites in the `tests` directory.
+  - Detects test files:
+    - `*Test.php` (PHPUnit/Codeception unit tests),
+    - `*Cest.php` (Cest tests).
+  - For each file, parses PHP source and creates test items for:
+    - methods whose names start with `test` in `*Test.php` files;
+    - all public methods in `*Cest.php` files (excluding magic methods like `__construct`).
 
-For example if there is an image subfolder under your extension project workspace:
+- **Running tests**
+  - Run a **single method** from gutter icon or Testing view.
+  - Run all tests in a **file**.
+  - Run an entire **suite** (e.g. `unit`, `functional`, `acceptance`).
+  - Uses `vendor/bin/codecept` from the workspace if available, otherwise falls back to `codecept` in `PATH`.
 
-\!\[feature X\]\(images/feature-x.png\)
+- **Result reporting**
+  - Executes Codeception with JUnit XML report enabled (`--xml`).
+  - Parses `tests/_output/report.xml` and maps each `<testcase>` back to the corresponding test item.
+  - Marks methods, files and suites as **passed / failed / skipped** in the Testing view.
+  - Shows failure messages from Codeception directly in VS Code.
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+![Testing panel and source gutter](screenshot.png)
 
 ## Requirements
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+- **VSCode** compatible IDE (Codium, Windsurf, etc.) with 1.105 or higher.
+- **PHP** and **Composer** installed.
+- **Codeception** installed in your project, typically via Composer:
 
-## Extension Settings
+  ```bash
+  composer require --dev codeception/codeception
+  ```
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+- Your project should follow the standard Codeception layout, for example:
 
-For example:
+```
+project/
+  codeception.yml
+  tests/
+    unit.suite.yml
+    functional.suite.yml
+    acceptance.suite.yml
+    unit/
+      SomeTest.php
+    functional/
+      SomeCest.php
+```
 
-This extension contributes the following settings:
+- Codeception must be able to generate a **JUnit XML** report into:
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+```
+tests/_output/report.xml
+```
 
-## Known Issues
+The adapter runs Codeception with `--xml`, so no extra configuration is usually needed, as long as `_output` exists and is writable.
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
 
-## Release Notes
+## Usage
 
-Users appreciate release notes as you update your extension.
+1. Open a workspace with a Codeception project in VS Code.
+2. Make sure `vendor/bin/codecept` (or `codecept` in `PATH`) works from the project root.
+3. Open the **Testing** view.
+4. The extension will discover suites and test files under the `tests` directory and create a tree:
 
-### 1.0.0
+   - `Codeception`
+     - `unit`
+       - `SomeTest.php`
+         - `testSomething`
+     - `functional`
+       - `SomeCest.php`
+         - `testScenarioA`
 
-Initial release of ...
+5. Run tests:
+   - click the green triangle next to a method to run a **single test**;
+   - click the triangle next to a file to run **all methods in that file**;
+   - click the triangle next to a suite to run **all tests in the suite**.
 
-### 1.0.1
+6. After the run finishes, check statuses and failure messages in the **Testing** view and in the **Test Results** output.
 
-Fixed issue #.
 
-### 1.1.0
+## Configuration
 
-Added features X, Y, and Z.
+Currently the adapter has no user‑facing settings. Planned options include:
 
----
+- override path to the `codecept` executable;
+- customize test file patterns and suite discovery;
+- toggle JUnit parsing / output verbosity.
 
-## Following extension guidelines
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+## Development
 
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
+This repository is a standard VS Code extension project.
 
-## Working with Markdown
+- **Build / typecheck / lint**:
 
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
+  ```bash
+  npm install
+  npm run compile
+  ```
 
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
+- **Launch the extension**:
+  - open this folder in VS Code;
+  - run the `Launch Extension` debug configuration;
+  - a new VS Code window will open with the extension loaded.
 
-## For more information
+- **Run extension tests**:
 
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+  ```bash
+  npm test
+  ```
 
-**Enjoy!**
+When changing the adapter logic (test discovery, running, XML parsing), keep the Testing view open in the debug instance of VS Code and use it to verify that files, methods and suites appear and update as expected.
