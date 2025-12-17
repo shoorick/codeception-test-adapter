@@ -97,6 +97,19 @@ function discoverCodeceptionTests(
 	}
 }
 
+function refreshAllTests(controller: vscode.TestController) {
+	controller.items.forEach(item => controller.items.delete(item.id));
+
+	const workspaceFolders = vscode.workspace.workspaceFolders;
+	if (!workspaceFolders) {
+		return;
+	}
+
+	for (const folder of workspaceFolders) {
+		discoverCodeceptionTests(controller, folder.uri.fsPath);
+	}
+}
+
 export function activate(context: vscode.ExtensionContext) {
 	const controller = vscode.tests.createTestController(
 		'codeception',
@@ -123,6 +136,17 @@ export function activate(context: vscode.ExtensionContext) {
 			refreshAllTests(controller);
 		}, 10000);
 	};
+
+	const suiteWatcher = vscode.workspace.createFileSystemWatcher('**/tests/*.suite.yml');
+	const testWatcher = vscode.workspace.createFileSystemWatcher('**/tests/**/*Test.php');
+	const cestWatcher = vscode.workspace.createFileSystemWatcher('**/tests/**/*Cest.php');
+
+	for (const watcher of [suiteWatcher, testWatcher, cestWatcher]) {
+		context.subscriptions.push(watcher);
+		watcher.onDidCreate(scheduleRefresh);
+		watcher.onDidChange(scheduleRefresh);
+		watcher.onDidDelete(scheduleRefresh);
+	}
 
 	controller.createRunProfile(
 		'Run',
