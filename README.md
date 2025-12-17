@@ -22,6 +22,7 @@ The extension discovers Codeception tests in your workspace and integrates them 
   - For each file, parses PHP source and creates test items for:
     - methods whose names start with `test` in `*Test.php` files;
     - all public methods in `*Cest.php` files (excluding magic methods like `__construct`).
+  - Watch for file changes and re-discover tests automatically.
 
 - **Running tests**
   - Run a **single method** from gutter icon or Testing view.
@@ -142,3 +143,9 @@ This repository is a standard VS Code extension project.
   ```
 
 When changing the adapter logic (test discovery, running, XML parsing), keep the Testing view open in the debug instance of VS Code and use it to verify that files, methods and suites appear and update as expected.
+
+## See also
+
+- [VS Code Extension API Documentation](https://code.visualstudio.com/api)
+- [Codeception Documentation](https://codeception.com/docs)
+- [Open-Meteo and Codeception example](https://github.com/shoorick/open-meteo-codeception), use it to check how it works
