@@ -231,11 +231,11 @@ export async function runCodeceptionTest(
 
 	const exitCode = await execProcess(command, args, workspaceRoot, run);
 	if (exitCode !== 0) {
-		run.appendOutput(`Codeception exited with code ${exitCode}\n`);
+		run.appendOutput(normalizeOutput(`Codeception exited with code ${exitCode}\n`));
 	}
 
 	if (!fs.existsSync(reportPath)) {
-		run.appendOutput('Codeception XML report not found\n');
+		run.appendOutput(normalizeOutput('Codeception XML report not found\n'));
 		if (exitCode !== 0) {
 			run.failed(item, new vscode.TestMessage(`Codeception exited with code ${exitCode}`));
 		}
@@ -245,7 +245,7 @@ export async function runCodeceptionTest(
 	try {
 		const stat = fs.statSync(reportPath);
 		if (stat.mtimeMs < runStartedAt) {
-			run.appendOutput('Codeception XML report is stale\n');
+			run.appendOutput(normalizeOutput('Codeception XML report is stale\n'));
 			if (exitCode !== 0) {
 				run.failed(item, new vscode.TestMessage(`Codeception exited with code ${exitCode}`));
 			}
@@ -375,13 +375,20 @@ function execProcess(
 	return new Promise(resolve => {
 		const proc = spawn(command, args, { cwd, shell: true, env: process.env });
 
-		proc.stdout.on('data', data => run.appendOutput(data.toString()));
-		proc.stderr.on('data', data => run.appendOutput(data.toString()));
+		proc.stdout.on('data', data => run.appendOutput(normalizeOutput(data.toString())));
+		proc.stderr.on('data', data => run.appendOutput(normalizeOutput(data.toString())));
 
 		proc.on('exit', code => {
 			resolve(typeof code === 'number' ? code : 0);
 		});
 	});
+}
+
+function normalizeOutput(text: string): string {
+	return text
+		.replace(/\r\n/g, '\n')
+		.replace(/\r/g, '\n')
+		.replace(/\n/g, '\r\n');
 }
 
 export function deactivate() { }
