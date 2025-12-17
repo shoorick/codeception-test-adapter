@@ -3,6 +3,8 @@
 VSCode compatible test adapter for [Codeception](https://codeception.com/)
 (PHP testing framework).
 
+![icon](icon.png)
+
 The extension discovers Codeception tests in your workspace and integrates them with the built‑in **Testing** view, so you can:
 
 - run individual test methods, whole test files, or entire suites;
