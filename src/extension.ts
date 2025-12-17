@@ -27,7 +27,7 @@ function populateTestsFromFile(
 
 		const methodName = match[1];
 
-		if (isCest && methodName.startsWith('__')) {
+		if (isCest && methodName.startsWith('_')) {
 			continue;
 		}
 
