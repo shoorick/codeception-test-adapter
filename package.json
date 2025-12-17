@@ -3,6 +3,7 @@
   "displayName": "Codeception Test Adapter",
   "description": "VSCode compatible test adapter for Codeception",
   "version": "0.0.2",
+  "icon": "icon.png",
   "publisher": "shoorick",
   "license": "MIT",
   "repository": {
