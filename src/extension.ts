@@ -166,11 +166,8 @@ export function activate(context: vscode.ExtensionContext) {
 					break;
 				}
 
-				run.started(item);
-
 				try {
 					await runCodeceptionTest(item, run, controller);
-					run.passed(item);
 				} catch (err) {
 					run.failed(item, new vscode.TestMessage(String(err)));
 				}
@@ -195,9 +192,18 @@ export async function runCodeceptionTest(
 
 	const workspaceRoot = workspaceFolder.uri.fsPath;
 	const command = findCodeceptCommand(workspaceRoot);
+	const runStartedAt = Date.now();
 
 	const filePath = uri.fsPath;
 	const testsRoot = path.join(workspaceRoot, 'tests');
+	const reportPath = path.join(workspaceRoot, 'tests', '_output', 'report.xml');
+	if (fs.existsSync(reportPath)) {
+		try {
+			fs.unlinkSync(reportPath);
+		} catch {
+			// ignore
+		}
+	}
 
 	let args: string[];
 
@@ -228,11 +234,27 @@ export async function runCodeceptionTest(
 		run.appendOutput(`Codeception exited with code ${exitCode}\n`);
 	}
 
-	// XML report path (default)
-	const reportPath = path.join(workspaceRoot, 'tests', '_output', 'report.xml');
 	if (!fs.existsSync(reportPath)) {
 		run.appendOutput('Codeception XML report not found\n');
-		run.end();
+		if (exitCode !== 0) {
+			run.failed(item, new vscode.TestMessage(`Codeception exited with code ${exitCode}`));
+		}
+		return;
+	}
+
+	try {
+		const stat = fs.statSync(reportPath);
+		if (stat.mtimeMs < runStartedAt) {
+			run.appendOutput('Codeception XML report is stale\n');
+			if (exitCode !== 0) {
+				run.failed(item, new vscode.TestMessage(`Codeception exited with code ${exitCode}`));
+			}
+			return;
+		}
+	} catch {
+		if (exitCode !== 0) {
+			run.failed(item, new vscode.TestMessage(`Codeception exited with code ${exitCode}`));
+		}
 		return;
 	}
 
@@ -244,7 +266,9 @@ export async function runCodeceptionTest(
 	let testcases: any[] = [];
 	const suites = parsed.testsuites?.testsuite;
 	if (!suites) {
-		run.end();
+		if (exitCode !== 0) {
+			run.failed(item, new vscode.TestMessage(`Codeception exited with code ${exitCode}`));
+		}
 		return;
 	}
 
@@ -258,7 +282,17 @@ export async function runCodeceptionTest(
 		testcases.push(...(Array.isArray(cases) ? cases : [cases]));
 	}
 
+	if (testcases.length === 0) {
+		if (exitCode !== 0) {
+			run.failed(item, new vscode.TestMessage(`Codeception exited with code ${exitCode}`));
+		} else {
+			run.passed(item);
+		}
+		return;
+	}
+
 	// process each testcase
+	let hadFailure = false;
 	for (const tc of testcases) {
 		const testName = tc['@_name'] || 'unknown';
 		const fileAttr = tc['@_file'] || '';
@@ -312,6 +346,7 @@ export async function runCodeceptionTest(
 		run.started(testItem);
 
 		if (tc.failure || tc.error) {
+			hadFailure = true;
 			run.failed(testItem, new vscode.TestMessage(tc.failure || tc.error));
 		} else if (tc.skipped) {
 			run.skipped(testItem);
@@ -320,7 +355,9 @@ export async function runCodeceptionTest(
 		}
 	}
 
-	run.end();
+	if (exitCode !== 0 && !hadFailure) {
+		run.failed(item, new vscode.TestMessage(`Codeception exited with code ${exitCode}`));
+	}
 }
 
 function findCodeceptCommand(workspaceRoot: string): string {
