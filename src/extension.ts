@@ -105,10 +105,24 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(controller);
 
+	controller.resolveHandler = async () => {
+		refreshAllTests(controller);
+	};
+
 	const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
 	if (workspaceFolder) {
 		discoverCodeceptionTests(controller, workspaceFolder.uri.fsPath);
 	}
+
+	let refreshTimer: NodeJS.Timeout | undefined;
+	const scheduleRefresh = () => {
+		if (refreshTimer) {
+			clearTimeout(refreshTimer);
+		}
+		refreshTimer = setTimeout(() => {
+			refreshAllTests(controller);
+		}, 10000);
+	};
 
 	controller.createRunProfile(
 		'Run',
