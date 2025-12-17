@@ -37,7 +37,7 @@ The extension discovers Codeception tests in your workspace and integrates them 
 
 ## Requirements
 
-- **VSCode** compatible IDE (Codium, Windsurf, etc.) with 1.105 or higher.
+- **VSCode** compatible IDE (Codium, Windsurf, etc.) with VSCode OSS version 1.105 or higher.
 - **PHP** and **Composer** installed.
 - **Codeception** installed in your project, typically via Composer:
 
@@ -68,6 +68,22 @@ tests/_output/report.xml
 
 The adapter runs Codeception with `--xml`, so no extra configuration is usually needed, as long as `_output` exists and is writable.
 
+## Install
+
+Using command line
+```bash
+code --install-extension codeception-test-adapter-0.0.1.vsix
+# or
+codium --install-extension codeception-test-adapter-0.0.1.vsix
+# or
+windsurf --install-extension codeception-test-adapter-0.0.1.vsix
+```
+depending on your IDE.
+Expected output:
+```
+Installing extensions...
+Extension 'codeception-test-adapter-0.0.1.vsix' was successfully installed.
+```
 
 ## Usage
 
