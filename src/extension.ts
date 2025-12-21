@@ -51,8 +51,13 @@ function populateTestsFromFile(
 
 function discoverCodeceptionTests(
 	controller: vscode.TestController,
-	workspaceRoot: string
+	workspaceFolder: vscode.WorkspaceFolder
 ) {
+	const workspaceRoot = workspaceFolder.uri.fsPath;
+	const workspaceId = workspaceRoot
+		.replace(/^[A-Za-z]:\\/, '')
+		.replace(/[\\/]/g, '_')
+		.replace(/[^A-Za-z0-9_.-]/g, '_');
 	const testsRoot = path.join(workspaceRoot, 'tests');
 
 	if (!fs.existsSync(testsRoot)) {
@@ -65,10 +70,11 @@ function discoverCodeceptionTests(
 	for (const suiteFile of suiteFiles) {
 		const suiteName = suiteFile.replace('.suite.yml', '');
 		const suiteDir = path.join(testsRoot, suiteName);
+		const suiteLabel = `${suiteName} (${workspaceFolder.name})`;
 
 		const suiteItem = controller.createTestItem(
-			`suite-${suiteName}`,
-			suiteName,
+			`suite-${workspaceId}-${suiteName}`,
+			suiteLabel,
 			vscode.Uri.file(suiteDir)
 		);
 
@@ -85,7 +91,7 @@ function discoverCodeceptionTests(
 			const filePath = path.join(suiteDir, file);
 
 			const testItem = controller.createTestItem(
-				`test-${suiteName}-${file}`,
+				`test-${workspaceId}-${suiteName}-${file}`,
 				file,
 				vscode.Uri.file(filePath)
 			);
@@ -106,7 +112,7 @@ function refreshAllTests(controller: vscode.TestController) {
 	}
 
 	for (const folder of workspaceFolders) {
-		discoverCodeceptionTests(controller, folder.uri.fsPath);
+		discoverCodeceptionTests(controller, folder);
 	}
 }
 
@@ -122,10 +128,7 @@ export function activate(context: vscode.ExtensionContext) {
 		refreshAllTests(controller);
 	};
 
-	const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-	if (workspaceFolder) {
-		discoverCodeceptionTests(controller, workspaceFolder.uri.fsPath);
-	}
+	refreshAllTests(controller);
 
 	let refreshTimer: NodeJS.Timeout | undefined;
 	const scheduleRefresh = () => {
