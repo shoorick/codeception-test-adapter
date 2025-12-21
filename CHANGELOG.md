@@ -2,7 +2,7 @@
 
 ## [0.0.3](https://github.com/shoorick/codeception-test-adapter/releases/tag/v0.0.3) - 2025-12-21
 
-- Add `codeceptionTestAdapter.*` settings
+- Add `codeceptionTestAdapter.*Path` settings
 - Decrease refresh delay
 - Support multiple workspace folders
 
