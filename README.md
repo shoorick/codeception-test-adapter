@@ -113,11 +113,19 @@ Extension 'codeception-test-adapter-0.0.1.vsix' was successfully installed.
 
 ## Configuration
 
-Currently the adapter has no user‑facing settings. Planned options include:
+The extension supports the following settings (workspace scope).
 
-- override path to the `codecept` executable;
-- customize test file patterns and suite discovery;
-- toggle JUnit parsing / output verbosity.
+- `codeceptionTestAdapter.codeceptPath`
+  - Path to Codeception executable.
+  - Default: empty (auto-detect `vendor/bin/codecept`, then `codecept` from `PATH`).
+  - If relative, it is resolved from the workspace folder.
+  - Example: `./vendor/bin/codecept`
+
+- `codeceptionTestAdapter.reportPath`
+  - Path to JUnit XML report produced by Codeception (`--xml`).
+  - Default: `tests/_output/report.xml`.
+  - If relative, it is resolved from the workspace folder.
+  - Example: `tests/_output/junit.xml`
 
 
 ## Development

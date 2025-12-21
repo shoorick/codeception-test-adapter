@@ -23,6 +23,25 @@
   "activationEvents": [
     "onStartupFinished"
   ],
+  "contributes": {
+    "configuration": {
+      "title": "Codeception Test Adapter",
+      "properties": {
+        "codeceptionTestAdapter.codeceptPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to Codeception executable. Leave empty to auto-detect (vendor/bin/codecept, then codecept from PATH). Relative paths are resolved from the workspace folder.",
+          "scope": "resource"
+        },
+        "codeceptionTestAdapter.reportPath": {
+          "type": "string",
+          "default": "tests/_output/report.xml",
+          "description": "Path to JUnit XML report produced by Codeception (--xml). Relative paths are resolved from the workspace folder.",
+          "scope": "resource"
+        }
+      }
+    }
+  },
   "main": "./dist/extension.js",
   "scripts": {
     "vscode:prepublish": "npm run package",

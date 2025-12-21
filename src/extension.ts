@@ -194,12 +194,19 @@ export async function runCodeceptionTest(
 	if (!workspaceFolder) { return; }
 
 	const workspaceRoot = workspaceFolder.uri.fsPath;
-	const command = findCodeceptCommand(workspaceRoot);
+	const config = vscode.workspace.getConfiguration('codeceptionTestAdapter', uri);
+	const configuredCodeceptPath = (config.get<string>('codeceptPath') || '').trim();
+	const configuredReportPath = (config.get<string>('reportPath') || '').trim();
+
+	const command = findCodeceptCommand(workspaceRoot, configuredCodeceptPath);
 	const runStartedAt = Date.now();
 
 	const filePath = uri.fsPath;
 	const testsRoot = path.join(workspaceRoot, 'tests');
-	const reportPath = path.join(workspaceRoot, 'tests', '_output', 'report.xml');
+	const reportPath = resolveWorkspacePath(
+		workspaceRoot,
+		configuredReportPath || 'tests/_output/report.xml'
+	);
 	if (fs.existsSync(reportPath)) {
 		try {
 			fs.unlinkSync(reportPath);
@@ -363,7 +370,23 @@ export async function runCodeceptionTest(
 	}
 }
 
-function findCodeceptCommand(workspaceRoot: string): string {
+function resolveWorkspacePath(workspaceRoot: string, p: string): string {
+	const trimmed = p.trim();
+	if (!trimmed) {
+		return workspaceRoot;
+	}
+	return path.isAbsolute(trimmed)
+		? trimmed
+		: path.join(workspaceRoot, trimmed);
+}
+
+function findCodeceptCommand(workspaceRoot: string, configuredPath?: string): string {
+	const configured = (configuredPath || '').trim();
+	if (configured) {
+		const resolved = resolveWorkspacePath(workspaceRoot, configured);
+		return resolved;
+	}
+
 	const local = path.join(workspaceRoot, 'vendor', 'bin', 'codecept');
 	if (fs.existsSync(local)) { return local; }
 	return 'codecept';
