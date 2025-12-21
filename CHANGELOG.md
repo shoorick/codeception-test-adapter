@@ -1,5 +1,9 @@
 # Change Log
 
+## Unreleased 0.0.3
+
+- Decrease refresh delay
+
 ## [0.0.2](https://github.com/shoorick/codeception-test-adapter/releases/tag/v0.0.2) - 2025-12-17
 
 - Add icon

@@ -134,7 +134,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 		refreshTimer = setTimeout(() => {
 			refreshAllTests(controller);
-		}, 10000);
+		}, 1000);
 	};
 
 	const suiteWatcher = vscode.workspace.createFileSystemWatcher('**/tests/*.suite.yml');
