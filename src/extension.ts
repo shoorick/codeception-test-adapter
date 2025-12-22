@@ -177,7 +177,7 @@ export function activate(context: vscode.ExtensionContext) {
 				}
 
 				try {
-					await runCodeceptionTest(item, run, controller);
+					await runCodeceptionTest(item, run, controller, token);
 				} catch (err) {
 					run.failed(item, new vscode.TestMessage(String(err)));
 				}
@@ -191,7 +191,8 @@ export function activate(context: vscode.ExtensionContext) {
 export async function runCodeceptionTest(
 	item: vscode.TestItem,
 	run: vscode.TestRun,
-	controller: vscode.TestController
+	controller: vscode.TestController,
+	token: vscode.CancellationToken
 ): Promise<void> {
 
 	const uri = item.uri;
@@ -248,7 +249,12 @@ export async function runCodeceptionTest(
 		args = ['run', suite, '--no-interaction', '--xml'];
 	}
 
-	const exitCode = await execProcess(command, args, workspaceRoot, run);
+	const exitCode = await execProcess(command, args, workspaceRoot, run, token);
+	if (token.isCancellationRequested || exitCode === 130) {
+		run.appendOutput(normalizeOutput('Test run cancelled\n'));
+		run.skipped(item);
+		return;
+	}
 	if (exitCode !== 0) {
 		run.appendOutput(normalizeOutput(`Codeception exited with code ${exitCode}\n`));
 	}
@@ -408,16 +414,71 @@ function execProcess(
 	command: string,
 	args: string[],
 	cwd: string,
-	run: vscode.TestRun
+	run: vscode.TestRun,
+	token: vscode.CancellationToken
 ): Promise<number> {
 	return new Promise(resolve => {
-		const proc = spawn(command, args, { cwd, shell: true, env: process.env });
+		if (token.isCancellationRequested) {
+			resolve(130);
+			return;
+		}
+
+		const proc = spawn(command, args, {
+			cwd,
+			shell: true,
+			env: process.env,
+			detached: process.platform !== 'win32'
+		});
+
+		let killedByCancel = false;
+		const killProcessTree = () => {
+			if (proc.killed) {
+				return;
+			}
+			killedByCancel = true;
+			try {
+				if (process.platform !== 'win32' && proc.pid) {
+					process.kill(-proc.pid, 'SIGTERM');
+				} else {
+					proc.kill('SIGTERM');
+				}
+			} catch {
+				// ignore
+			}
+
+			setTimeout(() => {
+				try {
+					if (process.platform !== 'win32' && proc.pid) {
+						process.kill(-proc.pid, 'SIGKILL');
+					} else {
+						proc.kill('SIGKILL');
+					}
+				} catch {
+					// ignore
+				}
+			}, 2000);
+		};
+
+		const cancelSubscription = token.onCancellationRequested(() => {
+			run.appendOutput(normalizeOutput('Cancellation requested\n'));
+			killProcessTree();
+		});
 
 		proc.stdout.on('data', data => run.appendOutput(normalizeOutput(data.toString())));
 		proc.stderr.on('data', data => run.appendOutput(normalizeOutput(data.toString())));
 
-		proc.on('exit', code => {
-			resolve(typeof code === 'number' ? code : 0);
+		proc.on('error', () => {
+			cancelSubscription.dispose();
+			resolve(1);
+		});
+
+		proc.on('close', code => {
+			cancelSubscription.dispose();
+			if (killedByCancel) {
+				resolve(130);
+				return;
+			}
+			resolve(code ?? 0);
 		});
 	});
 }
