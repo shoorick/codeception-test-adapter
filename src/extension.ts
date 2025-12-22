@@ -117,7 +117,8 @@ function normalizeReportTypes(input: unknown): ReportType[] {
 	const raw = Array.isArray(input) ? input : [];
 	const unique = new Set<ReportType>();
 	for (const v of raw) {
-		const s = String(v).trim().toLowerCase();
+		const first = String(v).trim().split(/\s+/)[0] || '';
+		const s = first.toLowerCase();
 		if (s === 'junit' || s === 'phpunit' || s === 'html') {
 			unique.add(s);
 		}

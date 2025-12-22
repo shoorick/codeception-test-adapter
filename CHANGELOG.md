@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Allow to manually terminate testing
+- Allow to make multiple reports (JUnit, PHPUnit, HTML)
 - Show result for each dataset in parametrized tests
 - Use subtrees instead of folder suffixes for multiple workspace folders
 

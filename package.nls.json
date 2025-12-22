@@ -3,5 +3,5 @@
 
   "codeceptionTestAdapter.reportPath.description": "Path to reports produced by Codeception. Relative paths are resolved from the workspace folder.",
 
-  "codeceptionTestAdapter.reportFormats.description": "Which Codeception reports to generate. HTML report is generated but not parsed; test results are parsed only from XML reports."
+  "codeceptionTestAdapter.reportFormats.description": "Which Codeception reports to generate. Multiple report formats can be selected, selecting multiple formats will generate all chosen reports. HTML report is generated but not parsed; test results are parsed only from XML reports."
 }
