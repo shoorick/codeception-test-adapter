@@ -110,9 +110,17 @@ Extension 'codeception-test-adapter-0.0.1.vsix' was successfully installed.
            - `[data-set-1]`
 
 5. Run tests:
-   - click the green triangle next to a method to run a **single test**;
-   - click the triangle next to a file to run **all methods in that file**;
-   - click the triangle next to a suite to run **all tests in the suite**.
+   - click the green triangle ▷ / green circled checkmark (✓) / red circled cross (×)
+     icon next to a method’s signature to run a **single test**;
+     right click for context menu with additional options;
+   - click the triangle ▷ icon next to search field or press
+     <kbd>Ctrl+; L</kbd> to **rerun last tests**
+   - move the mouse pointer over an element in Testing tree
+     and then click the appearing triangle ▷ icon to run:
+     - all tests in a **suite**
+     - all tests in a **file**
+     - a single **test method**
+     - a single **dataset entry** for parametrized tests
 
 6. After the run finishes, check statuses and failure messages
    in the **Testing** view and in the **Test Results** output.

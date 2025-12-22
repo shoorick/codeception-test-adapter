@@ -547,13 +547,19 @@ export async function runCodeceptionTest(
 		const parts = relative.split(path.sep);
 		const suite = parts[0];
 		let file = parts.slice(1).join(path.sep);
+		const fileBaseName = path.basename(filePath, '.php');
+		let filter: string | undefined;
 
 		// if a specific method was selected, narrow run to that method only
-		// using Codeception syntax: path/to/file.php:methodName
-		if (item.parent && item.parent.uri?.fsPath === filePath) {
+		// using Codeception --filter syntax: FileName:methodName
+		if (
+			item.parent &&
+			item.parent.uri?.fsPath === filePath &&
+			item.parent.parent?.uri?.fsPath !== filePath
+		) {
 			const methodName = item.label;
 			if (methodName) {
-				file = `${file}:${methodName}`;
+				filter = `${fileBaseName}:${methodName}`;
 			}
 		} else if (
 			item.parent &&
@@ -563,11 +569,17 @@ export async function runCodeceptionTest(
 			// dataset node: item -> method -> file
 			const methodName = item.parent.label;
 			if (methodName) {
-				file = `${file}:${methodName}`;
+				const match = item.id.match(/::data::(\d+)$/);
+				const datasetIndex = match ? Number(match[1]) : undefined;
+				filter = `${fileBaseName}:${methodName}` +
+					(Number.isFinite(datasetIndex) ? `#${datasetIndex}` : '');
 			}
 		}
 
 		args = ['run', suite, file, '--no-interaction', ...reportArgs];
+		if (filter) {
+			args.push(`--filter=${filter}`);
+		}
 	} else {
 		// Run an entire suite directory
 		const suite = path.basename(filePath);
@@ -682,6 +694,38 @@ export async function runCodeceptionTest(
 			recordOutcome(ti, outcome);
 		}
 	};
+	const getOrCreateDatasetItem = (
+		methodItem: vscode.TestItem,
+		datasetText: string
+	): vscode.TestItem => {
+		for (const [, child] of methodItem.children) {
+			if (!child.id.includes('::data::')) {
+				continue;
+			}
+			if (child.label.endsWith(` ${datasetText}`)) {
+				return child;
+			}
+		}
+
+		let maxIndex = -1;
+		for (const [, child] of methodItem.children) {
+			const m = child.id.match(/::data::(\d+)$/);
+			if (!m) {
+				continue;
+			}
+			maxIndex = Math.max(maxIndex, Number(m[1]));
+		}
+		const nextIndex = maxIndex + 1;
+		const datasetLabel = `[${nextIndex}] ${datasetText}`;
+		const datasetId = `${methodItem.id}::data::${nextIndex}`;
+		const datasetItem = controller.createTestItem(
+			datasetId,
+			datasetLabel,
+			methodItem.uri
+		);
+		methodItem.children.add(datasetItem);
+		return datasetItem;
+	};
 	const methodAggregates = new Map<
 		string,
 		{
@@ -738,18 +782,7 @@ export async function runCodeceptionTest(
 							? extractDatasetFromFeature(String(featureAttr))
 							: undefined;
 						if (dataset) {
-							const datasetLabel = `[${dataset}]`;
-							const datasetId = `${mappedMethodItem.id}::data::${sanitizeIdPart(dataset)}`;
-							let datasetItem = mappedMethodItem.children.get(datasetId);
-							if (!datasetItem) {
-								datasetItem = controller.createTestItem(
-									datasetId,
-									datasetLabel,
-									mappedMethodItem.uri
-								);
-								mappedMethodItem.children.add(datasetItem);
-							}
-							testItem = datasetItem;
+							testItem = getOrCreateDatasetItem(mappedMethodItem, dataset);
 						}
 					}
 
@@ -880,9 +913,13 @@ function execProcess(
 			return;
 		}
 
+		run.appendOutput(
+			normalizeOutput(`> ${[command, ...args].join(' ')}\n`)
+		);
+
 		const proc = spawn(command, args, {
 			cwd,
-			shell: true,
+			shell: process.platform === 'win32',
 			env: process.env,
 			detached: process.platform !== 'win32'
 		});
