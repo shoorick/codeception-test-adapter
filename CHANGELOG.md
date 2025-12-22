@@ -4,6 +4,10 @@
 
 - Allow to manually terminate testing
 - Allow to make multiple reports (JUnit, PHPUnit, HTML)
+- Improve UI: show spinner for clicked item,
+  its ancestors and descendants during test execution
+- Replace hard-coded paths and file names
+  with parameters from `codecept.yml`
 - Show result for each dataset in parametrized tests
 - Use subtrees instead of folder suffixes for multiple workspace folders
 

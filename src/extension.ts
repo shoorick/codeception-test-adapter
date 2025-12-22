@@ -153,6 +153,35 @@ function getAnyUri(item: vscode.TestItem): vscode.Uri | undefined {
 	return undefined;
 }
 
+function getSelfAndDescendants(item: vscode.TestItem): vscode.TestItem[] {
+	const out: vscode.TestItem[] = [];
+	const stack: vscode.TestItem[] = [item];
+	while (stack.length > 0) {
+		const cur = stack.pop();
+		if (!cur) {
+			continue;
+		}
+		out.push(cur);
+		for (const [, child] of cur.children) {
+			stack.push(child);
+		}
+	}
+	return out;
+}
+
+function getSelfAndAncestorsUntil(item: vscode.TestItem, untilInclusive: vscode.TestItem): vscode.TestItem[] {
+	const chain: vscode.TestItem[] = [];
+	let cur: vscode.TestItem | undefined = item;
+	while (cur) {
+		chain.push(cur);
+		if (cur.id === untilInclusive.id) {
+			break;
+		}
+		cur = cur.parent;
+	}
+	return chain;
+}
+
 function chooseXmlFormatToParse(reportTypes: ReportType[]): 'junit' | 'phpunit' | undefined {
 	const hasPhpunit = reportTypes.includes('phpunit');
 	const hasJunit = reportTypes.includes('junit');
@@ -437,9 +466,20 @@ export async function runCodeceptionTest(
 	const command = findCodeceptCommand(workspaceRoot, configuredCodeceptPath);
 	const runStartedAt = Date.now();
 
+	const startedIds = new Set<string>();
 	const startedChain = getSelfAndAncestors(item);
 	for (const ti of startedChain) {
-		run.started(ti);
+		if (!startedIds.has(ti.id)) {
+			run.started(ti);
+			startedIds.add(ti.id);
+		}
+	}
+	const startedSubtree = getSelfAndDescendants(item);
+	for (const ti of startedSubtree) {
+		if (!startedIds.has(ti.id)) {
+			run.started(ti);
+			startedIds.add(ti.id);
+		}
 	}
 	const finalizeChain = (outcome: 'passed' | 'failed' | 'skipped', message?: string) => {
 		for (const ti of startedChain) {
@@ -612,6 +652,36 @@ export async function runCodeceptionTest(
 
 	// process each testcase
 	let hadFailure = false;
+	const subtreeOutcomeById = new Map<
+		string,
+		{
+			item: vscode.TestItem;
+			hadFailure: boolean;
+			hadPass: boolean;
+			hadSkip: boolean;
+		}
+	>();
+	const recordOutcome = (ti: vscode.TestItem, outcome: 'failed' | 'passed' | 'skipped') => {
+		const agg = subtreeOutcomeById.get(ti.id) || {
+			item: ti,
+			hadFailure: false,
+			hadPass: false,
+			hadSkip: false
+		};
+		if (outcome === 'failed') {
+			agg.hadFailure = true;
+		} else if (outcome === 'passed') {
+			agg.hadPass = true;
+		} else {
+			agg.hadSkip = true;
+		}
+		subtreeOutcomeById.set(ti.id, agg);
+	};
+	const recordOutcomeToRoot = (leaf: vscode.TestItem, outcome: 'failed' | 'passed' | 'skipped') => {
+		for (const ti of getSelfAndAncestorsUntil(leaf, item)) {
+			recordOutcome(ti, outcome);
+		}
+	};
 	const methodAggregates = new Map<
 		string,
 		{
@@ -709,6 +779,7 @@ export async function runCodeceptionTest(
 		if (tc.failure || tc.error) {
 			hadFailure = true;
 			run.failed(testItem, new vscode.TestMessage(tc.failure || tc.error));
+			recordOutcomeToRoot(testItem, 'failed');
 			if (mappedMethodItem) {
 				const agg = methodAggregates.get(mappedMethodItem.id);
 				if (agg) {
@@ -717,6 +788,7 @@ export async function runCodeceptionTest(
 			}
 		} else if (tc.skipped) {
 			run.skipped(testItem);
+			recordOutcomeToRoot(testItem, 'skipped');
 			if (mappedMethodItem) {
 				const agg = methodAggregates.get(mappedMethodItem.id);
 				if (agg) {
@@ -725,6 +797,7 @@ export async function runCodeceptionTest(
 			}
 		} else {
 			run.passed(testItem);
+			recordOutcomeToRoot(testItem, 'passed');
 			if (mappedMethodItem) {
 				const agg = methodAggregates.get(mappedMethodItem.id);
 				if (agg) {
@@ -737,10 +810,29 @@ export async function runCodeceptionTest(
 	for (const [, agg] of methodAggregates) {
 		if (agg.hadFailure) {
 			run.failed(agg.methodItem, new vscode.TestMessage('One or more datasets failed'));
+			recordOutcomeToRoot(agg.methodItem, 'failed');
 		} else if (agg.hadPass) {
 			run.passed(agg.methodItem);
+			recordOutcomeToRoot(agg.methodItem, 'passed');
 		} else if (agg.hadSkip) {
 			run.skipped(agg.methodItem);
+			recordOutcomeToRoot(agg.methodItem, 'skipped');
+		}
+	}
+
+	// finalize subtree nodes (suite/file/method/dataset) that were started up front
+	for (const ti of startedSubtree) {
+		const a = subtreeOutcomeById.get(ti.id);
+		if (!a) {
+			run.skipped(ti);
+			continue;
+		}
+		if (a.hadFailure) {
+			run.failed(ti, new vscode.TestMessage('One or more child tests failed'));
+		} else if (a.hadPass) {
+			run.passed(ti);
+		} else {
+			run.skipped(ti);
 		}
 	}
 
