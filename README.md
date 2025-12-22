@@ -5,7 +5,8 @@ VSCode compatible test adapter for [Codeception](https://codeception.com/)
 
 ![icon](icon.png)
 
-The extension discovers Codeception tests in your workspace and integrates them with the built‑in **Testing** view, so you can:
+The extension discovers Codeception tests in your workspace
+and integrates them with the built‑in **Testing** view, so you can:
 
 - run individual test methods, whole test files, or entire suites;
 - see green/red status and failure messages directly in VS Code;
@@ -17,18 +18,19 @@ The extension discovers Codeception tests in your workspace and integrates them 
 - **Automatic test discovery**
   - Looks for Codeception suites in the `tests` directory.
   - Detects test files:
-    - `*Test.php` (PHPUnit/Codeception unit tests),
-    - `*Cest.php` (Cest tests).
+    - `*Test.php` (PHPUnit tests),
+    - `*Cest.php` (Codeception tests).
   - For each file, parses PHP source and creates test items for:
     - methods whose names start with `test` in `*Test.php` files;
-    - all public methods in `*Cest.php` files (excluding magic methods like `__construct`).
+    - all public methods in `*Cest.php` files (excluding magic methods like `_before`).
   - Watch for file changes and re-discover tests automatically.
 
 - **Running tests**
   - Run a **single method** from gutter icon or Testing view.
   - Run all tests in a **file**.
   - Run an entire **suite** (e.g. `unit`, `functional`, `acceptance`).
-  - Uses `vendor/bin/codecept` from the workspace if available, otherwise falls back to `codecept` in `PATH`.
+  - Uses `vendor/bin/codecept` from the workspace if available,
+    otherwise falls back to `codecept` in `PATH`.
 
 - **Result reporting**
   - Executes Codeception with JUnit or PHPUnit XML or HTML report enabled
@@ -42,7 +44,7 @@ The extension discovers Codeception tests in your workspace and integrates them 
 
 ## Requirements
 
-- **VSCode** compatible IDE (Codium, Windsurf, etc.) with VSCode OSS version 1.105 or higher.
+- **VSCode** or compatible IDE (Codium, Windsurf, etc.) with VSCode OSS version 1.105 or higher.
 - **PHP** and **Composer** installed.
 - **Codeception** installed in your project, typically via Composer:
 
@@ -97,20 +99,23 @@ Extension 'codeception-test-adapter-0.0.1.vsix' was successfully installed.
 3. Open the **Testing** view.
 4. The extension will discover suites and test files under the `tests` directory and create a tree:
 
-   - `Codeception`
+   - `workspace-directory`
      - `unit`
        - `SomeTest.php`
          - `testSomething`
      - `functional`
        - `SomeCest.php`
          - `testScenarioA`
+           - `[data-set-0]`
+           - `[data-set-1]`
 
 5. Run tests:
    - click the green triangle next to a method to run a **single test**;
    - click the triangle next to a file to run **all methods in that file**;
    - click the triangle next to a suite to run **all tests in the suite**.
 
-6. After the run finishes, check statuses and failure messages in the **Testing** view and in the **Test Results** output.
+6. After the run finishes, check statuses and failure messages
+   in the **Testing** view and in the **Test Results** output.
 
 
 ## Configuration
