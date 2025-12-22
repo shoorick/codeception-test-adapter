@@ -38,6 +38,17 @@
           "default": "tests/_output/report.xml",
           "description": "Path to JUnit XML report produced by Codeception (--xml). Relative paths are resolved from the workspace folder.",
           "scope": "resource"
+        },
+        "codeceptionTestAdapter.reportFormat": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "junit",
+            "phpunit"
+          ],
+          "default": "auto",
+          "description": "Which Codeception XML report format to generate and parse. 'auto' selects based on reportPath (phpunit-report.xml => phpunit, otherwise junit).",
+          "scope": "resource"
         }
       }
     }

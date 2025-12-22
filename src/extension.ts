@@ -29,6 +29,34 @@ function sanitizeIdPart(input: string): string {
 		.slice(0, 80);
 }
 
+function determineReportFormat(configuredFormat: string, reportPath: string): 'junit' | 'phpunit' {
+	const format = (configuredFormat || '').trim().toLowerCase();
+	if (format === 'junit' || format === 'phpunit') {
+		return format;
+	}
+	const p = reportPath.toLowerCase();
+	return p.includes('phpunit') ? 'phpunit' : 'junit';
+}
+
+function collectTestcasesFromNode(node: any, out: any[]) {
+	if (!node || typeof node !== 'object') {
+		return;
+	}
+
+	const tc = node.testcase;
+	if (tc) {
+		out.push(...(Array.isArray(tc) ? tc : [tc]));
+	}
+
+	const ts = node.testsuite;
+	if (ts) {
+		const suites = Array.isArray(ts) ? ts : [ts];
+		for (const s of suites) {
+			collectTestcasesFromNode(s, out);
+		}
+	}
+}
+
 function populateTestsFromFile(
 	controller: vscode.TestController,
 	parent: vscode.TestItem,
@@ -229,17 +257,29 @@ export async function runCodeceptionTest(
 	const workspaceRoot = workspaceFolder.uri.fsPath;
 	const config = vscode.workspace.getConfiguration('codeceptionTestAdapter', uri);
 	const configuredCodeceptPath = (config.get<string>('codeceptPath') || '').trim();
-	const configuredReportPath = (config.get<string>('reportPath') || '').trim();
+	const reportPathInspect = config.inspect<string>('reportPath');
+	const configuredReportPath = (
+		reportPathInspect?.workspaceFolderValue ??
+		reportPathInspect?.workspaceValue ??
+		reportPathInspect?.globalValue ??
+		''
+	).trim();
+	const configuredReportFormat = (config.get<string>('reportFormat') || 'auto').trim();
 
 	const command = findCodeceptCommand(workspaceRoot, configuredCodeceptPath);
 	const runStartedAt = Date.now();
 
 	const filePath = uri.fsPath;
 	const testsRoot = path.join(workspaceRoot, 'tests');
+	const defaultReportRelativePath =
+		configuredReportFormat.trim().toLowerCase() === 'phpunit'
+			? 'tests/_output/phpunit-report.xml'
+			: 'tests/_output/report.xml';
 	const reportPath = resolveWorkspacePath(
 		workspaceRoot,
-		configuredReportPath || 'tests/_output/report.xml'
+		configuredReportPath || defaultReportRelativePath
 	);
+	const reportFormat = determineReportFormat(configuredReportFormat, reportPath);
 	if (fs.existsSync(reportPath)) {
 		try {
 			fs.unlinkSync(reportPath);
@@ -250,8 +290,10 @@ export async function runCodeceptionTest(
 
 	let args: string[];
 
+	const reportArgs = reportFormat === 'phpunit' ? ['--phpunit-xml'] : ['--xml'];
+
 	if (item.id.startsWith('project-')) {
-		args = ['run', '--no-interaction', '--xml'];
+		args = ['run', '--no-interaction', ...reportArgs];
 	} else if (filePath.endsWith('.php')) {
 		const relative = path.relative(testsRoot, filePath);
 		const parts = relative.split(path.sep);
@@ -277,11 +319,11 @@ export async function runCodeceptionTest(
 			}
 		}
 
-		args = ['run', suite, file, '--no-interaction', '--xml'];
+		args = ['run', suite, file, '--no-interaction', ...reportArgs];
 	} else {
 		// Run an entire suite directory
 		const suite = path.basename(filePath);
-		args = ['run', suite, '--no-interaction', '--xml'];
+		args = ['run', suite, '--no-interaction', ...reportArgs];
 	}
 
 	const exitCode = await execProcess(command, args, workspaceRoot, run, token);
@@ -294,16 +336,32 @@ export async function runCodeceptionTest(
 		run.appendOutput(normalizeOutput(`Codeception exited with code ${exitCode}\n`));
 	}
 
-	if (!fs.existsSync(reportPath)) {
-		run.appendOutput(normalizeOutput('Codeception XML report not found\n'));
+	let effectiveReportPath = reportPath;
+	if (!fs.existsSync(effectiveReportPath)) {
+		const altReportPath = resolveWorkspacePath(
+			workspaceRoot,
+			reportFormat === 'phpunit'
+				? 'tests/_output/phpunit-report.xml'
+				: 'tests/_output/report.xml'
+		);
+		if (altReportPath !== effectiveReportPath && fs.existsSync(altReportPath)) {
+			effectiveReportPath = altReportPath;
+		} else {
+			run.appendOutput(
+				normalizeOutput(`Codeception XML report not found: ${effectiveReportPath}\n`)
+			);
+			if (exitCode !== 0) {
+				run.failed(item, new vscode.TestMessage(`Codeception exited with code ${exitCode}`));
+			}
+			return;
+		}
 		if (exitCode !== 0) {
 			run.failed(item, new vscode.TestMessage(`Codeception exited with code ${exitCode}`));
 		}
-		return;
 	}
 
 	try {
-		const stat = fs.statSync(reportPath);
+		const stat = fs.statSync(effectiveReportPath);
 		if (stat.mtimeMs < runStartedAt) {
 			run.appendOutput(normalizeOutput('Codeception XML report is stale\n'));
 			if (exitCode !== 0) {
@@ -318,35 +376,20 @@ export async function runCodeceptionTest(
 		return;
 	}
 
-	const xmlContent = fs.readFileSync(reportPath, 'utf-8');
+	const xmlContent = fs.readFileSync(effectiveReportPath, 'utf-8');
 	const parser = new XMLParser({ ignoreAttributes: false });
 	const parsed = parser.parse(xmlContent);
 
-	// get all testcases from all testsuites
+	// get all testcases (JUnit: testcases directly under top-level suite;
+	// PHPUnit XML: nested suites per class/file)
 	let testcases: any[] = [];
-	const suites = parsed.testsuites?.testsuite;
-	if (!suites) {
-		if (exitCode !== 0) {
-			run.failed(item, new vscode.TestMessage(`Codeception exited with code ${exitCode}`));
-		}
-		return;
+	collectTestcasesFromNode(parsed.testsuites, testcases);
+	if (testcases.length === 0) {
+		collectTestcasesFromNode(parsed, testcases);
 	}
-
-	// ensure suites is always array
-	const suiteArray = Array.isArray(suites) ? suites : [suites];
-
-	for (const suite of suiteArray) {
-		const cases = suite.testcase;
-		if (!cases) { continue; }
-
-		testcases.push(...(Array.isArray(cases) ? cases : [cases]));
-	}
-
 	if (testcases.length === 0) {
 		if (exitCode !== 0) {
 			run.failed(item, new vscode.TestMessage(`Codeception exited with code ${exitCode}`));
-		} else {
-			run.passed(item);
 		}
 		return;
 	}

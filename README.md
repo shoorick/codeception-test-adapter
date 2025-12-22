@@ -122,10 +122,18 @@ The extension supports the following settings (workspace scope).
   - Example: `./vendor/bin/codecept`
 
 - `codeceptionTestAdapter.reportPath`
-  - Path to JUnit XML report produced by Codeception (`--xml`).
-  - Default: `tests/_output/report.xml`.
+  - Path to XML report produced by Codeception.
+  - Default depends on `reportFormat`:
+    - `junit` (or `auto`): `tests/_output/report.xml`
+    - `phpunit`: `tests/_output/phpunit-report.xml`
   - If relative, it is resolved from the workspace folder.
   - Example: `tests/_output/junit.xml`
+
+- `codeceptionTestAdapter.reportFormat`
+  - Which XML report format to generate and parse.
+  - Values: `auto`, `junit`, `phpunit`.
+  - Default: `auto`.
+  - In `auto` mode the adapter selects based on `reportPath` (if it contains `phpunit`, then `phpunit`, otherwise `junit`).
 
 
 ## Development
