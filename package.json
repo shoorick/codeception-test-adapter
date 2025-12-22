@@ -30,13 +30,29 @@
         "codeceptionTestAdapter.codeceptPath": {
           "type": "string",
           "default": "",
-          "description": "Path to Codeception executable. Leave empty to auto-detect (vendor/bin/codecept, then codecept from PATH). Relative paths are resolved from the workspace folder.",
+          "description": "Path to Codeception executable. Leave empty to auto-detect (`vendor/bin/codecept`, then codecept from `PATH`). Relative paths are resolved from the workspace folder.",
           "scope": "resource"
         },
         "codeceptionTestAdapter.reportPath": {
           "type": "string",
-          "default": "tests/_output/report.xml",
-          "description": "Path to JUnit XML report produced by Codeception (--xml). Relative paths are resolved from the workspace folder.",
+          "default": "",
+          "description": "Path to JUnit XML report produced by Codeception (`--xml`). Relative paths are resolved from the workspace folder.",
+          "scope": "resource"
+        },
+        "codeceptionTestAdapter.reportFormats": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "junit",
+              "phpunit",
+              "html"
+            ]
+          },
+          "default": [
+            "junit"
+          ],
+          "description": "Which Codeception reports to generate. HTML report is generated but not parsed; test results are parsed only from XML reports.",
           "scope": "resource"
         },
         "codeceptionTestAdapter.reportFormat": {
@@ -47,7 +63,7 @@
             "phpunit"
           ],
           "default": "auto",
-          "description": "Which Codeception XML report format to generate and parse. 'auto' selects based on reportPath (phpunit-report.xml => phpunit, otherwise junit).",
+          "description": "(Legacy) Which Codeception XML report format to generate and parse. Prefer reportFormats. 'auto' selects based on reportPath (phpunit-report.xml => phpunit, otherwise junit).",
           "scope": "resource"
         }
       }

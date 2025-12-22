@@ -57,6 +57,110 @@ function collectTestcasesFromNode(node: any, out: any[]) {
 	}
 }
 
+function getCodeceptionOutputDir(workspaceRoot: string): string {
+	const candidates = [
+		path.join(workspaceRoot, 'codeception.yml'),
+		path.join(workspaceRoot, 'codeception.yaml'),
+		path.join(workspaceRoot, 'codeception.dist.yml'),
+		path.join(workspaceRoot, 'codeception.dist.yaml')
+	];
+
+	let content: string | undefined;
+	for (const p of candidates) {
+		try {
+			if (fs.existsSync(p)) {
+				content = fs.readFileSync(p, 'utf8');
+				break;
+			}
+		} catch {
+			// ignore
+		}
+	}
+	if (!content) {
+		return path.join(workspaceRoot, 'tests', '_output');
+	}
+
+	const lines = content.split(/\r?\n/);
+	let inPaths = false;
+	let pathsIndent: number | undefined;
+
+	for (const line of lines) {
+		if (/^\s*#/.test(line)) {
+			continue;
+		}
+
+		const pathsMatch = line.match(/^(\s*)paths\s*:\s*$/);
+		if (pathsMatch) {
+			inPaths = true;
+			pathsIndent = pathsMatch[1].length;
+			continue;
+		}
+		if (!inPaths) {
+			continue;
+		}
+		const indentMatch = line.match(/^(\s*)\S/);
+		if (indentMatch && pathsIndent !== undefined && indentMatch[1].length <= pathsIndent) {
+			// left the paths block
+			inPaths = false;
+			pathsIndent = undefined;
+			continue;
+		}
+
+		const outputMatch = line.match(/^\s*output\s*:\s*(.+)\s*$/);
+		if (outputMatch) {
+			let value = outputMatch[1].trim();
+			value = value.replace(/^['"]|['"]$/g, '');
+			if (!value) {
+				break;
+			}
+			return resolveWorkspacePath(workspaceRoot, value);
+		}
+	}
+
+	return path.join(workspaceRoot, 'tests', '_output');
+}
+
+type ReportType = 'junit' | 'phpunit' | 'html';
+
+function normalizeReportTypes(input: unknown): ReportType[] {
+	const raw = Array.isArray(input) ? input : [];
+	const unique = new Set<ReportType>();
+	for (const v of raw) {
+		const s = String(v).trim().toLowerCase();
+		if (s === 'junit' || s === 'phpunit' || s === 'html') {
+			unique.add(s);
+		}
+	}
+	return [...unique];
+}
+
+function getDefaultReportFileName(format: 'junit' | 'phpunit'): string {
+	return format === 'phpunit' ? 'phpunit-report.xml' : 'report.xml';
+}
+
+function chooseXmlFormatToParse(reportTypes: ReportType[], legacyFormat: string, reportPath: string): 'junit' | 'phpunit' | undefined {
+	const hasPhpunit = reportTypes.includes('phpunit');
+	const hasJunit = reportTypes.includes('junit');
+	if (hasPhpunit) {
+		return 'phpunit';
+	}
+	if (hasJunit) {
+		return 'junit';
+	}
+
+	const legacy = (legacyFormat || '').trim().toLowerCase();
+	if (legacy === 'phpunit') {
+		return 'phpunit';
+	}
+	if (legacy === 'junit') {
+		return 'junit';
+	}
+	if (legacy === 'auto') {
+		return determineReportFormat('auto', reportPath);
+	}
+	return undefined;
+}
+
 function populateTestsFromFile(
 	controller: vscode.TestController,
 	parent: vscode.TestItem,
@@ -265,22 +369,38 @@ export async function runCodeceptionTest(
 		''
 	).trim();
 	const configuredReportFormat = (config.get<string>('reportFormat') || 'auto').trim();
+	const configuredReportFormats = normalizeReportTypes(config.get<unknown>('reportFormats'));
 
 	const command = findCodeceptCommand(workspaceRoot, configuredCodeceptPath);
 	const runStartedAt = Date.now();
 
 	const filePath = uri.fsPath;
 	const testsRoot = path.join(workspaceRoot, 'tests');
-	const defaultReportRelativePath =
-		configuredReportFormat.trim().toLowerCase() === 'phpunit'
-			? 'tests/_output/phpunit-report.xml'
-			: 'tests/_output/report.xml';
-	const reportPath = resolveWorkspacePath(
-		workspaceRoot,
-		configuredReportPath || defaultReportRelativePath
+	const outputDir = getCodeceptionOutputDir(workspaceRoot);
+
+	// Determine which XML format we will parse.
+	// If reportFormats is not configured, fall back to legacy reportFormat.
+	const xmlFormatToParse = chooseXmlFormatToParse(
+		configuredReportFormats,
+		configuredReportFormat,
+		configuredReportPath
 	);
-	const reportFormat = determineReportFormat(configuredReportFormat, reportPath);
-	if (fs.existsSync(reportPath)) {
+	if (!xmlFormatToParse) {
+		vscode.window.showWarningMessage(
+			'Codeception Test Adapter: no XML report type selected. Enable reportFormats (junit/phpunit) to see test results.'
+		);
+	}
+
+	const explicitReportPath = configuredReportPath
+		? resolveWorkspacePath(workspaceRoot, configuredReportPath)
+		: '';
+	const defaultXmlReportPath = xmlFormatToParse
+		? path.join(outputDir, getDefaultReportFileName(xmlFormatToParse))
+		: '';
+	const reportPath = explicitReportPath || defaultXmlReportPath;
+
+	// cleanup previous report file if we are going to parse XML
+	if (reportPath && fs.existsSync(reportPath)) {
 		try {
 			fs.unlinkSync(reportPath);
 		} catch {
@@ -290,7 +410,23 @@ export async function runCodeceptionTest(
 
 	let args: string[];
 
-	const reportArgs = reportFormat === 'phpunit' ? ['--phpunit-xml'] : ['--xml'];
+	const reportArgs: string[] = [];
+	const legacyAutoProbePath = configuredReportPath
+		? resolveWorkspacePath(workspaceRoot, configuredReportPath)
+		: '';
+	const reportTypesToGenerate = configuredReportFormats.length > 0
+		? configuredReportFormats
+		: [determineReportFormat(configuredReportFormat, legacyAutoProbePath) === 'phpunit' ? 'phpunit' : 'junit'];
+
+	for (const rt of reportTypesToGenerate) {
+		if (rt === 'html') {
+			reportArgs.push('--html');
+		} else if (rt === 'phpunit') {
+			reportArgs.push('--phpunit-xml');
+		} else {
+			reportArgs.push('--xml');
+		}
+	}
 
 	if (item.id.startsWith('project-')) {
 		args = ['run', '--no-interaction', ...reportArgs];
@@ -336,14 +472,22 @@ export async function runCodeceptionTest(
 		run.appendOutput(normalizeOutput(`Codeception exited with code ${exitCode}\n`));
 	}
 
+	if (!xmlFormatToParse) {
+		// No XML report selected => no parsing is possible.
+		if (exitCode !== 0) {
+			run.failed(item, new vscode.TestMessage(`Codeception exited with code ${exitCode}`));
+		} else {
+			run.passed(item);
+		}
+		return;
+	}
+
 	let effectiveReportPath = reportPath;
+	if (!effectiveReportPath) {
+		effectiveReportPath = path.join(outputDir, getDefaultReportFileName(xmlFormatToParse));
+	}
 	if (!fs.existsSync(effectiveReportPath)) {
-		const altReportPath = resolveWorkspacePath(
-			workspaceRoot,
-			reportFormat === 'phpunit'
-				? 'tests/_output/phpunit-report.xml'
-				: 'tests/_output/report.xml'
-		);
+		const altReportPath = path.join(outputDir, getDefaultReportFileName(xmlFormatToParse));
 		if (altReportPath !== effectiveReportPath && fs.existsSync(altReportPath)) {
 			effectiveReportPath = altReportPath;
 		} else {

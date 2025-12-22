@@ -31,9 +31,11 @@ The extension discovers Codeception tests in your workspace and integrates them 
   - Uses `vendor/bin/codecept` from the workspace if available, otherwise falls back to `codecept` in `PATH`.
 
 - **Result reporting**
-  - Executes Codeception with JUnit XML report enabled (`--xml`).
-  - Parses `tests/_output/report.xml` and maps each `<testcase>` back to the corresponding test item.
-  - Marks methods, files and suites as **passed / failed / skipped** in the Testing view.
+  - Executes Codeception with JUnit or PHPUnit XML or HTML report enabled
+    (`--xml`, `--phpunit-xml`, `--html`).
+  - Parses XML report and maps each `<testcase>` back to the corresponding test item.
+  - Marks suites, files, methods and dataset entries
+    as **passed / failed / skipped** in the Testing view.
   - Shows failure messages from Codeception directly in VS Code.
 
 ![Testing panel and source gutter](screenshot.png)
@@ -63,13 +65,8 @@ project/
       SomeCest.php
 ```
 
-- Codeception must be able to generate a **JUnit XML** report into:
-
-```
-tests/_output/report.xml
-```
-
-The adapter runs Codeception with `--xml`, so no extra configuration is usually needed, as long as `_output` exists and is writable.
+- Codeception must be able to write reports to the output directory
+  (typically `tests/_output/`, use `codeception.yml` to configure the output path).
 
 ## Install
 
@@ -128,17 +125,24 @@ The extension supports the following settings (workspace scope).
 
 - `codeceptionTestAdapter.reportPath`
   - Path to XML report produced by Codeception.
-  - Default depends on `reportFormat`:
-    - `junit` (or `auto`): `tests/_output/report.xml`
-    - `phpunit`: `tests/_output/phpunit-report.xml`
+  - Default: empty.
+    - If empty, the adapter uses Codeception defaults in `paths.output` from `codeception.yml`:
+      - JUnit XML: `report.xml`
+      - PHPUnit XML: `phpunit-report.xml`
   - If relative, it is resolved from the workspace folder.
   - Example: `tests/_output/junit.xml`
 
+- `codeceptionTestAdapter.reportFormats`
+  - Which reports to generate.
+  - Values: `junit`, `phpunit`, `html`.
+  - Default: `["junit"]`.
+  - Note: HTML report can be generated, but the adapter parses test results only from XML.
+
 - `codeceptionTestAdapter.reportFormat`
-  - Which XML report format to generate and parse.
+  - (Legacy) Which XML report format to generate and parse.
   - Values: `auto`, `junit`, `phpunit`.
   - Default: `auto`.
-  - In `auto` mode the adapter selects based on `reportPath` (if it contains `phpunit`, then `phpunit`, otherwise `junit`).
+  - Prefer `reportFormats`.
 
 
 ## Development
