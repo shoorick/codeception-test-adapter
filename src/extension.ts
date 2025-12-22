@@ -4,6 +4,31 @@ import * as vscode from 'vscode';
 import { spawn } from 'child_process';
 import { XMLParser } from 'fast-xml-parser';
 
+function decodeHtmlEntities(input: string): string {
+	return input
+		.replace(/&quot;/g, '"')
+		.replace(/&apos;/g, "'")
+		.replace(/&lt;/g, '<')
+		.replace(/&gt;/g, '>')
+		.replace(/&amp;/g, '&');
+}
+
+function extractDatasetFromFeature(feature: string): string | undefined {
+	const idx = feature.indexOf('|');
+	if (idx < 0) {
+		return undefined;
+	}
+	const data = decodeHtmlEntities(feature.substring(idx + 1).trim());
+	return data ? data : undefined;
+}
+
+function sanitizeIdPart(input: string): string {
+	return input
+		.replace(/[\s\r\n\t]+/g, ' ')
+		.replace(/[^A-Za-z0-9_.-]/g, '_')
+		.slice(0, 80);
+}
+
 function populateTestsFromFile(
 	controller: vscode.TestController,
 	parent: vscode.TestItem,
@@ -240,6 +265,16 @@ export async function runCodeceptionTest(
 			if (methodName) {
 				file = `${file}:${methodName}`;
 			}
+		} else if (
+			item.parent &&
+			item.parent.parent &&
+			item.parent.parent.uri?.fsPath === filePath
+		) {
+			// dataset node: item -> method -> file
+			const methodName = item.parent.label;
+			if (methodName) {
+				file = `${file}:${methodName}`;
+			}
 		}
 
 		args = ['run', suite, file, '--no-interaction', '--xml'];
@@ -318,11 +353,23 @@ export async function runCodeceptionTest(
 
 	// process each testcase
 	let hadFailure = false;
+	const methodAggregates = new Map<
+		string,
+		{
+			methodItem: vscode.TestItem;
+			hadFailure: boolean;
+			hadPass: boolean;
+			hadSkip: boolean;
+		}
+	>();
+	let tcIndex = 0;
 	for (const tc of testcases) {
 		const testName = tc['@_name'] || 'unknown';
 		const fileAttr = tc['@_file'] || '';
+		const featureAttr = tc['@_feature'] || '';
 
 		let testItem: vscode.TestItem | undefined;
+		let mappedMethodItem: vscode.TestItem | undefined;
 
 		// try to map to project -> suite -> file -> method
 		for (const [, projectItem] of controller.items) {
@@ -352,8 +399,29 @@ export async function runCodeceptionTest(
 						: testName;
 					for (const [, methodItem] of fileItem.children) {
 						if (methodItem.label === testName || methodItem.label === baseName) {
+							mappedMethodItem = methodItem;
 							testItem = methodItem;
 							break;
+						}
+					}
+
+					if (mappedMethodItem) {
+						const dataset = featureAttr
+							? extractDatasetFromFeature(String(featureAttr))
+							: undefined;
+						if (dataset) {
+							const datasetLabel = `[${dataset}]`;
+							const datasetId = `${mappedMethodItem.id}::data::${sanitizeIdPart(dataset)}::${tcIndex}`;
+							let datasetItem = mappedMethodItem.children.get(datasetId);
+							if (!datasetItem) {
+								datasetItem = controller.createTestItem(
+									datasetId,
+									datasetLabel,
+									mappedMethodItem.uri
+								);
+								mappedMethodItem.children.add(datasetItem);
+							}
+							testItem = datasetItem;
 						}
 					}
 
@@ -370,16 +438,55 @@ export async function runCodeceptionTest(
 		}
 
 		if (!testItem) { testItem = item; }
+		if (mappedMethodItem) {
+			const agg = methodAggregates.get(mappedMethodItem.id) || {
+				methodItem: mappedMethodItem,
+				hadFailure: false,
+				hadPass: false,
+				hadSkip: false
+			};
+			methodAggregates.set(mappedMethodItem.id, agg);
+		}
 
 		run.started(testItem);
 
 		if (tc.failure || tc.error) {
 			hadFailure = true;
 			run.failed(testItem, new vscode.TestMessage(tc.failure || tc.error));
+			if (mappedMethodItem) {
+				const agg = methodAggregates.get(mappedMethodItem.id);
+				if (agg) {
+					agg.hadFailure = true;
+				}
+			}
 		} else if (tc.skipped) {
 			run.skipped(testItem);
+			if (mappedMethodItem) {
+				const agg = methodAggregates.get(mappedMethodItem.id);
+				if (agg) {
+					agg.hadSkip = true;
+				}
+			}
 		} else {
 			run.passed(testItem);
+			if (mappedMethodItem) {
+				const agg = methodAggregates.get(mappedMethodItem.id);
+				if (agg) {
+					agg.hadPass = true;
+				}
+			}
+		}
+
+		tcIndex++;
+	}
+
+	for (const [, agg] of methodAggregates) {
+		if (agg.hadFailure) {
+			run.failed(agg.methodItem, new vscode.TestMessage('One or more datasets failed'));
+		} else if (agg.hadPass) {
+			run.passed(agg.methodItem);
+		} else if (agg.hadSkip) {
+			run.skipped(agg.methodItem);
 		}
 	}
 

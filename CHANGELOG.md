@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Allow to manually terminate testing
+- Show result for each dataset in parametrized tests
 - Use subtrees instead of folder suffixes for multiple workspace folders
 
 ## [0.0.3](https://github.com/shoorick/codeception-test-adapter/releases/tag/v0.0.3) - 2025-12-21
