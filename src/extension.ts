@@ -29,15 +29,6 @@ function sanitizeIdPart(input: string): string {
 		.slice(0, 80);
 }
 
-function determineReportFormat(configuredFormat: string, reportPath: string): 'junit' | 'phpunit' {
-	const format = (configuredFormat || '').trim().toLowerCase();
-	if (format === 'junit' || format === 'phpunit') {
-		return format;
-	}
-	const p = reportPath.toLowerCase();
-	return p.includes('phpunit') ? 'phpunit' : 'junit';
-}
-
 function collectTestcasesFromNode(node: any, out: any[]) {
 	if (!node || typeof node !== 'object') {
 		return;
@@ -138,7 +129,7 @@ function getDefaultReportFileName(format: 'junit' | 'phpunit'): string {
 	return format === 'phpunit' ? 'phpunit-report.xml' : 'report.xml';
 }
 
-function chooseXmlFormatToParse(reportTypes: ReportType[], legacyFormat: string, reportPath: string): 'junit' | 'phpunit' | undefined {
+function chooseXmlFormatToParse(reportTypes: ReportType[]): 'junit' | 'phpunit' | undefined {
 	const hasPhpunit = reportTypes.includes('phpunit');
 	const hasJunit = reportTypes.includes('junit');
 	if (hasPhpunit) {
@@ -146,17 +137,6 @@ function chooseXmlFormatToParse(reportTypes: ReportType[], legacyFormat: string,
 	}
 	if (hasJunit) {
 		return 'junit';
-	}
-
-	const legacy = (legacyFormat || '').trim().toLowerCase();
-	if (legacy === 'phpunit') {
-		return 'phpunit';
-	}
-	if (legacy === 'junit') {
-		return 'junit';
-	}
-	if (legacy === 'auto') {
-		return determineReportFormat('auto', reportPath);
 	}
 	return undefined;
 }
@@ -368,7 +348,6 @@ export async function runCodeceptionTest(
 		reportPathInspect?.globalValue ??
 		''
 	).trim();
-	const configuredReportFormat = (config.get<string>('reportFormat') || 'auto').trim();
 	const configuredReportFormats = normalizeReportTypes(config.get<unknown>('reportFormats'));
 
 	const command = findCodeceptCommand(workspaceRoot, configuredCodeceptPath);
@@ -378,13 +357,12 @@ export async function runCodeceptionTest(
 	const testsRoot = path.join(workspaceRoot, 'tests');
 	const outputDir = getCodeceptionOutputDir(workspaceRoot);
 
+	const reportTypesToGenerate: ReportType[] = configuredReportFormats.length > 0
+		? configuredReportFormats
+		: ['junit'];
+
 	// Determine which XML format we will parse.
-	// If reportFormats is not configured, fall back to legacy reportFormat.
-	const xmlFormatToParse = chooseXmlFormatToParse(
-		configuredReportFormats,
-		configuredReportFormat,
-		configuredReportPath
-	);
+	const xmlFormatToParse = chooseXmlFormatToParse(reportTypesToGenerate);
 	if (!xmlFormatToParse) {
 		vscode.window.showWarningMessage(
 			'Codeception Test Adapter: no XML report type selected. Enable reportFormats (junit/phpunit) to see test results.'
@@ -411,12 +389,6 @@ export async function runCodeceptionTest(
 	let args: string[];
 
 	const reportArgs: string[] = [];
-	const legacyAutoProbePath = configuredReportPath
-		? resolveWorkspacePath(workspaceRoot, configuredReportPath)
-		: '';
-	const reportTypesToGenerate = configuredReportFormats.length > 0
-		? configuredReportFormats
-		: [determineReportFormat(configuredReportFormat, legacyAutoProbePath) === 'phpunit' ? 'phpunit' : 'junit'];
 
 	for (const rt of reportTypesToGenerate) {
 		if (rt === 'html') {

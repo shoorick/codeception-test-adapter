@@ -36,7 +36,7 @@
         "codeceptionTestAdapter.reportPath": {
           "type": "string",
           "default": "",
-          "description": "Path to JUnit XML report produced by Codeception (`--xml`). Relative paths are resolved from the workspace folder.",
+          "description": "Path to reports produced by Codeception. Relative paths are resolved from the workspace folder.",
           "scope": "resource"
         },
         "codeceptionTestAdapter.reportFormats": {
@@ -53,17 +53,6 @@
             "junit"
           ],
           "description": "Which Codeception reports to generate. HTML report is generated but not parsed; test results are parsed only from XML reports.",
-          "scope": "resource"
-        },
-        "codeceptionTestAdapter.reportFormat": {
-          "type": "string",
-          "enum": [
-            "auto",
-            "junit",
-            "phpunit"
-          ],
-          "default": "auto",
-          "description": "(Legacy) Which Codeception XML report format to generate and parse. Prefer reportFormats. 'auto' selects based on reportPath (phpunit-report.xml => phpunit, otherwise junit).",
           "scope": "resource"
         }
       }

@@ -143,12 +143,6 @@ The extension supports the following settings (workspace scope).
   - Default: `["junit"]`.
   - Note: HTML report can be generated, but the adapter parses test results only from XML.
 
-- `codeceptionTestAdapter.reportFormat`
-  - (Legacy) Which XML report format to generate and parse.
-  - Values: `auto`, `junit`, `phpunit`.
-  - Default: `auto`.
-  - Prefer `reportFormats`.
-
 
 ## Development
 
