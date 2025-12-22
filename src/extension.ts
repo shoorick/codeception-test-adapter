@@ -64,21 +64,28 @@ function discoverCodeceptionTests(
 		return;
 	}
 
+	const projectItem = controller.createTestItem(
+		`project-${workspaceId}`,
+		workspaceFolder.name,
+		workspaceFolder.uri
+	);
+
+	controller.items.add(projectItem);
+
 	const suiteFiles = fs.readdirSync(testsRoot)
 		.filter(f => f.endsWith('.suite.yml'));
 
 	for (const suiteFile of suiteFiles) {
 		const suiteName = suiteFile.replace('.suite.yml', '');
 		const suiteDir = path.join(testsRoot, suiteName);
-		const suiteLabel = `${suiteName} (${workspaceFolder.name})`;
 
 		const suiteItem = controller.createTestItem(
 			`suite-${workspaceId}-${suiteName}`,
-			suiteLabel,
+			suiteName,
 			vscode.Uri.file(suiteDir)
 		);
 
-		controller.items.add(suiteItem);
+		projectItem.children.add(suiteItem);
 
 		if (!fs.existsSync(suiteDir)) {
 			continue;
@@ -217,7 +224,9 @@ export async function runCodeceptionTest(
 
 	let args: string[];
 
-	if (filePath.endsWith('.php')) {
+	if (item.id.startsWith('project-')) {
+		args = ['run', '--no-interaction', '--xml'];
+	} else if (filePath.endsWith('.php')) {
 		const relative = path.relative(testsRoot, filePath);
 		const parts = relative.split(path.sep);
 		const suite = parts[0];
@@ -309,44 +318,47 @@ export async function runCodeceptionTest(
 
 		let testItem: vscode.TestItem | undefined;
 
-		// try to map to suite -> file -> method
-		for (const [, suiteItem] of controller.items) {
-			for (const [, fileItem] of suiteItem.children) {
-				if (!fileItem.uri) {
-					continue;
-				}
-
-				// prefer exact path match when possible
-				const samePath = fileAttr && fileItem.uri.fsPath === fileAttr;
-				// fall back to basename match if report points to different checkout path
-				const sameName =
-					!samePath && fileAttr &&
-					path.basename(fileItem.uri.fsPath) === path.basename(fileAttr);
-
-				if (!samePath && !sameName) {
-					continue;
-				}
-
-				// if we ran a specific method, try to find it by name
-				// handle parameterized tests like "testX with data set #0" by
-				// matching both full name and base method name before the suffix
-				const baseNameIndex = testName.indexOf(' with data set');
-				const baseName = baseNameIndex >= 0
-					? testName.substring(0, baseNameIndex)
-					: testName;
-				for (const [, methodItem] of fileItem.children) {
-					if (methodItem.label === testName || methodItem.label === baseName) {
-						testItem = methodItem;
-						break;
+		// try to map to project -> suite -> file -> method
+		for (const [, projectItem] of controller.items) {
+			for (const [, suiteItem] of projectItem.children) {
+				for (const [, fileItem] of suiteItem.children) {
+					if (!fileItem.uri) {
+						continue;
 					}
-				}
 
-				if (!testItem) {
-					// fall back to file-level item
-					testItem = fileItem;
-				}
+					// prefer exact path match when possible
+					const samePath = fileAttr && fileItem.uri.fsPath === fileAttr;
+					// fall back to basename match if report points to different checkout path
+					const sameName =
+						!samePath && fileAttr &&
+						path.basename(fileItem.uri.fsPath) === path.basename(fileAttr);
 
-				break;
+					if (!samePath && !sameName) {
+						continue;
+					}
+
+					// if we ran a specific method, try to find it by name
+					// handle parameterized tests like "testX with data set #0" by
+					// matching both full name and base method name before the suffix
+					const baseNameIndex = testName.indexOf(' with data set');
+					const baseName = baseNameIndex >= 0
+						? testName.substring(0, baseNameIndex)
+						: testName;
+					for (const [, methodItem] of fileItem.children) {
+						if (methodItem.label === testName || methodItem.label === baseName) {
+							testItem = methodItem;
+							break;
+						}
+					}
+
+					if (!testItem) {
+						// fall back to file-level item
+						testItem = fileItem;
+					}
+
+					break;
+				}
+				if (testItem) { break; }
 			}
 			if (testItem) { break; }
 		}

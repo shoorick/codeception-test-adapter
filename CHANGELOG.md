@@ -1,5 +1,9 @@
 # Change Log
 
+## [Unreleased]
+
+- Use subtrees instead of folder suffixes for multiple workspace folders
+
 ## [0.0.3](https://github.com/shoorick/codeception-test-adapter/releases/tag/v0.0.3) - 2025-12-21
 
 - Add `codeceptionTestAdapter.*Path` settings
