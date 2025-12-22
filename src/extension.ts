@@ -130,6 +130,29 @@ function getDefaultReportFileName(format: 'junit' | 'phpunit'): string {
 	return format === 'phpunit' ? 'phpunit-report.xml' : 'report.xml';
 }
 
+function getSelfAndAncestors(item: vscode.TestItem): vscode.TestItem[] {
+	const chain: vscode.TestItem[] = [];
+	let cur: vscode.TestItem | undefined = item;
+	while (cur) {
+		chain.push(cur);
+		cur = cur.parent;
+	}
+	return chain;
+}
+
+function getAnyUri(item: vscode.TestItem): vscode.Uri | undefined {
+	if (item.uri) {
+		return item.uri;
+	}
+	for (const [, child] of item.children) {
+		const u = getAnyUri(child);
+		if (u) {
+			return u;
+		}
+	}
+	return undefined;
+}
+
 function chooseXmlFormatToParse(reportTypes: ReportType[]): 'junit' | 'phpunit' | undefined {
 	const hasPhpunit = reportTypes.includes('phpunit');
 	const hasJunit = reportTypes.includes('junit');
@@ -324,6 +347,64 @@ export function activate(context: vscode.ExtensionContext) {
 			run.end();
 		}
 	);
+
+	controller.createRunProfile(
+		'Debug',
+		vscode.TestRunProfileKind.Debug,
+		async (request, token) => {
+			const run = controller.createTestRun(request);
+			const queue: vscode.TestItem[] = [];
+
+			if (request.include) {
+				queue.push(...request.include);
+			} else {
+				controller.items.forEach(item => queue.push(item));
+			}
+
+			for (const item of queue) {
+				if (token.isCancellationRequested) {
+					break;
+				}
+
+				try {
+					await runCodeceptionTest(item, run, controller, token);
+				} catch (err) {
+					run.failed(item, new vscode.TestMessage(String(err)));
+				}
+			}
+
+			run.end();
+		}
+	);
+
+	controller.createRunProfile(
+		'Coverage',
+		vscode.TestRunProfileKind.Coverage,
+		async (request, token) => {
+			const run = controller.createTestRun(request);
+			const queue: vscode.TestItem[] = [];
+
+			if (request.include) {
+				queue.push(...request.include);
+			} else {
+				controller.items.forEach(item => queue.push(item));
+			}
+
+			for (const item of queue) {
+				if (token.isCancellationRequested) {
+					break;
+				}
+
+				try {
+					await runCodeceptionTest(item, run, controller, token);
+				} catch (err) {
+					run.failed(item, new vscode.TestMessage(String(err)));
+				}
+			}
+
+			run.end();
+		}
+	);
 }
 
 export async function runCodeceptionTest(
@@ -333,8 +414,10 @@ export async function runCodeceptionTest(
 	token: vscode.CancellationToken
 ): Promise<void> {
 
-	const uri = item.uri;
-	if (!uri) { return; }
+	const uri = getAnyUri(item);
+	if (!uri) {
+		return;
+	}
 
 	const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
 	if (!workspaceFolder) { return; }
@@ -353,6 +436,22 @@ export async function runCodeceptionTest(
 
 	const command = findCodeceptCommand(workspaceRoot, configuredCodeceptPath);
 	const runStartedAt = Date.now();
+
+	const startedChain = getSelfAndAncestors(item);
+	for (const ti of startedChain) {
+		run.started(ti);
+	}
+	const finalizeChain = (outcome: 'passed' | 'failed' | 'skipped', message?: string) => {
+		for (const ti of startedChain) {
+			if (outcome === 'failed') {
+				run.failed(ti, new vscode.TestMessage(message || 'Test failed'));
+			} else if (outcome === 'passed') {
+				run.passed(ti);
+			} else {
+				run.skipped(ti);
+			}
+		}
+	};
 
 	const filePath = uri.fsPath;
 	const testsRoot = path.join(workspaceRoot, 'tests');
@@ -438,7 +537,7 @@ export async function runCodeceptionTest(
 	const exitCode = await execProcess(command, args, workspaceRoot, run, token);
 	if (token.isCancellationRequested || exitCode === 130) {
 		run.appendOutput(normalizeOutput('Test run cancelled\n'));
-		run.skipped(item);
+		finalizeChain('skipped');
 		return;
 	}
 	if (exitCode !== 0) {
@@ -448,9 +547,9 @@ export async function runCodeceptionTest(
 	if (!xmlFormatToParse) {
 		// No XML report selected => no parsing is possible.
 		if (exitCode !== 0) {
-			run.failed(item, new vscode.TestMessage(`Codeception exited with code ${exitCode}`));
+			finalizeChain('failed', `Codeception exited with code ${exitCode}`);
 		} else {
-			run.passed(item);
+			finalizeChain('passed');
 		}
 		return;
 	}
@@ -468,12 +567,12 @@ export async function runCodeceptionTest(
 				normalizeOutput(`Codeception XML report not found: ${effectiveReportPath}\n`)
 			);
 			if (exitCode !== 0) {
-				run.failed(item, new vscode.TestMessage(`Codeception exited with code ${exitCode}`));
+				finalizeChain('failed', `Codeception exited with code ${exitCode}`);
 			}
 			return;
 		}
 		if (exitCode !== 0) {
-			run.failed(item, new vscode.TestMessage(`Codeception exited with code ${exitCode}`));
+			finalizeChain('failed', `Codeception exited with code ${exitCode}`);
 		}
 	}
 
@@ -482,13 +581,13 @@ export async function runCodeceptionTest(
 		if (stat.mtimeMs < runStartedAt) {
 			run.appendOutput(normalizeOutput('Codeception XML report is stale\n'));
 			if (exitCode !== 0) {
-				run.failed(item, new vscode.TestMessage(`Codeception exited with code ${exitCode}`));
+				finalizeChain('failed', `Codeception exited with code ${exitCode}`);
 			}
 			return;
 		}
 	} catch {
 		if (exitCode !== 0) {
-			run.failed(item, new vscode.TestMessage(`Codeception exited with code ${exitCode}`));
+			finalizeChain('failed', `Codeception exited with code ${exitCode}`);
 		}
 		return;
 	}
@@ -506,7 +605,7 @@ export async function runCodeceptionTest(
 	}
 	if (testcases.length === 0) {
 		if (exitCode !== 0) {
-			run.failed(item, new vscode.TestMessage(`Codeception exited with code ${exitCode}`));
+			finalizeChain('failed', `Codeception exited with code ${exitCode}`);
 		}
 		return;
 	}
@@ -522,7 +621,6 @@ export async function runCodeceptionTest(
 			hadSkip: boolean;
 		}
 	>();
-	let tcIndex = 0;
 	for (const tc of testcases) {
 		const testName = tc['@_name'] || 'unknown';
 		const fileAttr = tc['@_file'] || '';
@@ -571,7 +669,7 @@ export async function runCodeceptionTest(
 							: undefined;
 						if (dataset) {
 							const datasetLabel = `[${dataset}]`;
-							const datasetId = `${mappedMethodItem.id}::data::${sanitizeIdPart(dataset)}::${tcIndex}`;
+							const datasetId = `${mappedMethodItem.id}::data::${sanitizeIdPart(dataset)}`;
 							let datasetItem = mappedMethodItem.children.get(datasetId);
 							if (!datasetItem) {
 								datasetItem = controller.createTestItem(
@@ -608,8 +706,6 @@ export async function runCodeceptionTest(
 			methodAggregates.set(mappedMethodItem.id, agg);
 		}
 
-		run.started(testItem);
-
 		if (tc.failure || tc.error) {
 			hadFailure = true;
 			run.failed(testItem, new vscode.TestMessage(tc.failure || tc.error));
@@ -636,8 +732,6 @@ export async function runCodeceptionTest(
 				}
 			}
 		}
-
-		tcIndex++;
 	}
 
 	for (const [, agg] of methodAggregates) {
@@ -651,10 +745,14 @@ export async function runCodeceptionTest(
 	}
 
 	if (exitCode !== 0 && !hadFailure) {
-		run.failed(item, new vscode.TestMessage(`Codeception exited with code ${exitCode}`));
+		finalizeChain('failed', `Codeception exited with code ${exitCode}`);
+		return;
 	}
+	finalizeChain(
+		hadFailure ? 'failed' : 'passed',
+		hadFailure ? 'One or more child tests failed' : undefined
+	);
 }
-
 function resolveWorkspacePath(workspaceRoot: string, p: string): string {
 	const trimmed = p.trim();
 	if (!trimmed) {
