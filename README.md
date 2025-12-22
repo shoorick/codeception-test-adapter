@@ -73,13 +73,18 @@ The adapter runs Codeception with `--xml`, so no extra configuration is usually 
 
 ## Install
 
-Using command line
+### From Extensions view
+
+Open the Extensions view <kbd>Ctrl+Shift+X</kbd>,
+search for "Codeception Test Adapter", and click Install.
+
+### Using command line
 ```bash
-code --install-extension codeception-test-adapter-0.0.1.vsix
+code --install-extension codeception-test-adapter-VERSION.vsix
 # or
-codium --install-extension codeception-test-adapter-0.0.1.vsix
+codium --install-extension codeception-test-adapter-VERSION.vsix
 # or
-windsurf --install-extension codeception-test-adapter-0.0.1.vsix
+windsurf --install-extension codeception-test-adapter-VERSION.vsix
 ```
 depending on your IDE.
 Expected output:
