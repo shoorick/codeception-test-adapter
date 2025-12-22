@@ -30,13 +30,15 @@
         "codeceptionTestAdapter.codeceptPath": {
           "type": "string",
           "default": "",
-          "description": "Path to Codeception executable. Leave empty to auto-detect (`vendor/bin/codecept`, then codecept from `PATH`). Relative paths are resolved from the workspace folder.",
+          "description": "%codeceptionTestAdapter.codeceptPath.description%",
+          "markdownDescription": "%codeceptionTestAdapter.codeceptPath.description%",
           "scope": "resource"
         },
         "codeceptionTestAdapter.reportPath": {
           "type": "string",
           "default": "",
-          "description": "Path to reports produced by Codeception. Relative paths are resolved from the workspace folder.",
+          "description": "%codeceptionTestAdapter.reportPath.description%",
+          "markdownDescription": "%codeceptionTestAdapter.reportPath.description%",
           "scope": "resource"
         },
         "codeceptionTestAdapter.reportFormats": {
@@ -52,7 +54,8 @@
           "default": [
             "junit"
           ],
-          "description": "Which Codeception reports to generate. HTML report is generated but not parsed; test results are parsed only from XML reports.",
+          "description": "%codeceptionTestAdapter.reportFormats.description%",
+          "markdownDescription": "%codeceptionTestAdapter.reportFormats.description%",
           "scope": "resource"
         }
       }
